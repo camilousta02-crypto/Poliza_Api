@@ -1,7 +1,7 @@
-echo "app.db
+app.db
 *.db
 .env
 __pycache__/
 *.pyc
 .venv/
-venv/" >> .gitignore
+venv/
