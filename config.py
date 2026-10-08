@@ -1,9 +1,19 @@
-"""Configuración del servicio."""
+"""Configuración del servicio, leída desde variables de entorno."""
+from functools import lru_cache
 
-# TODO: sacar esto a variables de entorno antes de subir a producción
-SECRETO_FIRMA = "aseguradora-santo-tomas-2026-firma-7c1e"
-CLAVE_API_REASEGURO = "rk-polizas-2026-4b9f0a3d"
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DATABASE_URL = "sqlite:///app.db"
-RUTA_MODELO = "modelo.pkl"
-UMBRAL_ALTO_RIESGO = 0.6
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    DATABASE_URL: str
+    SECRETO_FIRMA: str
+    CLAVE_API_REASEGURO: str
+    RUTA_MODELO: str = "modelo.pkl"
+    UMBRAL_ALTO_RIESGO: float = 0.6
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
