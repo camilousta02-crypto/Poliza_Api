@@ -7,9 +7,9 @@ import pickle
 from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from config import Settings, get_settings
 from database import get_db
@@ -66,12 +66,16 @@ def crear_poliza(datos: PolizaEntrada, db: Session = Depends(get_db),
 
 @app.get("/polizas", response_model=list[PolizaSalida])
 def listar_polizas(db: Session = Depends(get_db)):
-    return list(db.scalars(select(Poliza).order_by(Poliza.id)))
+    consulta = select(Poliza).options(selectinload(Poliza.siniestros)).order_by(Poliza.id)
+    return list(db.scalars(consulta))
 
 
 @app.get("/polizas/{id_poliza}", response_model=PolizaSalida)
 def obtener_poliza(id_poliza: int, db: Session = Depends(get_db)):
-    return _buscar_poliza(db, id_poliza)
+    poliza = db.get(Poliza, id_poliza, options=[joinedload(Poliza.siniestros)])
+    if poliza is None:
+        raise HTTPException(status_code=404, detail=f"no existe la póliza {id_poliza}")
+    return poliza
 
 
 @app.put("/polizas/{id_poliza}", response_model=PolizaSalida)
@@ -96,17 +100,25 @@ def declarar_siniestro(id_poliza: int, datos: SiniestroEntrada, db: Session = De
 
 @app.get("/siniestros", response_model=list[SiniestroListado])
 def listar_siniestros(db: Session = Depends(get_db)):
+    consulta = select(Siniestro).options(joinedload(Siniestro.poliza)).order_by(Siniestro.id)
     return [SiniestroListado(id=s.id, poliza_id=s.poliza_id, numero_poliza=s.poliza.numero,
                              fecha=s.fecha, monto=s.monto, descripcion=s.descripcion,
                              estado=s.estado)
-            for s in db.scalars(select(Siniestro).order_by(Siniestro.id))]
+            for s in db.scalars(consulta)]
 
 
 @app.get("/resumen", response_model=list[ResumenFila])
 def resumen(db: Session = Depends(get_db)):
-    return [ResumenFila(numero=p.numero, n_siniestros=len(p.siniestros),
-                        monto_total=round(sum(s.monto for s in p.siniestros), 2))
-            for p in db.scalars(select(Poliza).order_by(Poliza.id))]
+    consulta = (
+        select(Poliza.numero,
+               func.count(Siniestro.id),
+               func.coalesce(func.sum(Siniestro.monto), 0.0))
+        .outerjoin(Siniestro, Siniestro.poliza_id == Poliza.id)
+        .group_by(Poliza.id)
+        .order_by(Poliza.id)
+    )
+    return [ResumenFila(numero=n, n_siniestros=c, monto_total=round(t, 2))
+            for n, c, t in db.execute(consulta)]
 
 
 @app.post("/score", response_model=PuntuacionSalida)

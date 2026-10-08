@@ -48,6 +48,10 @@
 > `contar_consultas.py`: por qué ese número, por qué cambia o no entre 10 y 2000
 > pólizas, y qué estrategia dejaron en el código. Si un resultado los sorprendió,
 > díganlo: eso se premia.
+/polizas (selectinload): con lazy daba 11 y 2001 consultas, un N+1 (1 por las pólizas más 1 por cada una al leer siniestros). Con selectinload da 2 y 5: 1 por las pólizas y las demás cargan los siniestros con IN (...) en lotes de ~500 ids. Cambia entre 10 y 2000 solo por el número de lotes (1 vs 4), no por el número de pólizas.
+/polizas/{id} (joinedload): es un solo registro, así que lazy ya daba 2 sin importar n. Con joinedload da 1 (un JOIN que trae póliza y siniestros). El conteo no depende de n porque siempre se pide una póliza. (Añade aquí lo que midas con selectinload.)
+/siniestros (joinedload): la relación es a uno (siniestro → póliza). lazy daba 2001, no 6001, porque el identity map reutiliza cada póliza ya cargada (2000 distintas y 6000 siniestros). Con joinedload da 1 consulta fija, con n=10 y con n=2000.
+/resumen (agregada): solo necesita contar y sumar, así que un GROUP BY con COUNT y SUM da 1 consulta y no carga ningún siniestro en memoria. (Añade aquí lo que midas con selectinload.)
 
 ## `/polizas`
 
