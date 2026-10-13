@@ -1,42 +1,53 @@
-# polizas-api-v0
+# polizas-api
 
 Servicio de gestión de pólizas de la Aseguradora Santo Tomás. Registra pólizas
 y los siniestros que se les declaran, resume la cartera y puntúa el riesgo de
 cada póliza con un modelo, guardando cada predicción.
 
-## Instalación
+## Configuración
+
+La configuración se lee de variables de entorno (o de un archivo `.env`).
+Las claves no están en el repositorio.
 
 ```bash
-pip install -r requirements.txt
+cp .env.example .env      # y cambie los valores de ejemplo
 ```
 
-El modelo entrenado (`modelo.pkl`) y la base de datos con datos de ejemplo
-(`app.db`) vienen en el repositorio: no hay que configurar nada.
-
-## Puesta en marcha
+## Arranque local
 
 ```bash
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+python -m pip install -r requirements.txt
+python -m alembic upgrade head        # crea el esquema en la base de DATABASE_URL
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-El mismo comando sirve en el servidor de producción. `--reload` es cómodo
-porque recoge los cambios sin reiniciar a mano.
+La base de datos no viene en el repositorio: la crea Alembic al aplicar las migraciones.
 
-### En contenedor
+## En contenedor
 
 ```bash
 docker build -t polizas-api .
 docker run -p 8000:8000 polizas-api
+curl localhost:8000/health
+```
+
+La imagen aplica las migraciones al arrancar y corre sin privilegios de root.
+Sin volumen, los datos viven dentro del contenedor: se conservan con
+`docker restart` pero se pierden al borrarlo. Para que persistan:
+
+```bash
+docker run -p 8000:8000 -v datos:/app/data polizas-api
 ```
 
 ## Endpoints
 
 | Método | Ruta | Qué hace |
 |---|---|---|
-| POST | `/polizas` | Crea una póliza, con sus siniestros si ya tiene |
+| GET | `/health` | Estado del servicio y de la base de datos |
+| POST | `/polizas` | Crea una póliza (201; 409 si el número existe; 422 si es inválida) |
 | GET | `/polizas` | Lista las pólizas con sus siniestros |
-| GET | `/polizas/{id}` | Consulta una póliza |
-| PUT | `/polizas/{id}` | Actualiza una póliza |
+| GET | `/polizas/{id}` | Consulta una póliza (404 si no existe) |
+| PUT | `/polizas/{id}` | Actualiza una póliza, de forma parcial |
 | POST | `/polizas/{id}/siniestros` | Declara un siniestro |
 | GET | `/siniestros` | Lista los siniestros con su póliza |
 | GET | `/resumen` | Siniestros y monto total por póliza |
@@ -50,24 +61,17 @@ curl -X POST localhost:8000/polizas \
   -H "Content-Type: application/json" \
   -d '{"numero": "POL-2026-09001", "asegurado": "Ana Rueda", "tipo": "auto", "prima": 1250000,
        "fecha_inicio": "2026-01-15", "fecha_fin": "2027-01-14"}'
-```
 
-```bash
 curl -X POST localhost:8000/score -H "Content-Type: application/json" -d '{"numero": "POL-2026-09001"}'
 ```
 
 ## Pruebas
 
 ```bash
-pytest tests/test_api.py
+python -m pytest tests/test_contrato.py
 ```
 
 ## Utilidades
 
 - `sembrar_datos.py` crea pólizas de ejemplo a través de la API.
-- `contar_consultas.py` cuenta las sentencias SQL que emite cada endpoint.
-
-## Notas
-
-- Las claves están en `config.py` para que el equipo pueda probar sin configurar nada.
-- La base de datos se crea sola al arrancar si no existe.
+- `contar_consultas.py` cuenta las sentencias SQL que emite cada endpoint y escribe `CONSULTAS.csv`.
