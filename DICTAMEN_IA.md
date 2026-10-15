@@ -4,7 +4,7 @@
 
 ## Defecto 1
 
--**Qué está mal**: Varias aserciones aceptan más de un resultado, incluido el incorrecto (`status_code in (200, 201, 422)`, `in (200, 404)`) o solo descartan que el servidor se caiga (`< 500`). Por eso no distinguen un servicio sano de uno roto: con la mutación A el 404 pasó a 200 y el test original siguió en verde.
+- **Qué está mal**: Varias aserciones aceptan más de un resultado, incluido el incorrecto (`status_code in (200, 201, 422)`, `in (200, 404)`) o solo descartan que el servidor se caiga (`< 500`). Por eso no distinguen un servicio sano de uno roto: con la mutación A el 404 pasó a 200 y el test original siguió en verde.
 - **Por qué es un defecto** (módulo · sección): M10 · 4. Framework pytest
 - **Cómo lo comprobamos**: Mutación A: `GET /polizas/{id}` deja de devolver 404 y responde 200. El test original sigue en verde y el corregido falla.
 
@@ -49,11 +49,11 @@ FAILED tests/test_ia_corregido.py::test_poliza_inexistente_da_404 - Assertion...
 1 failed, 7 passed, 1 warning in 17.34s
 ```
 
-- **Corrección**: Cada test exige un único código y comprueba el contenido: 201 al crear, 404 si no existe, 409 si está duplicado, 422 si la prima no es positiva, y valores concretos en `/resumen` y en `/predicciones`. Con la misma mutación, `test_poliza_inexistente_da_404` falla.
+- **Corrección**: Cada test exige un único código y comprueba el contenido: 201 al crear, 404 si no existe, 409 si está duplicado, 422 si la prima no es positiva, y valores concretos en `/resumen` y `/predicciones`. Con la misma mutación, `test_poliza_inexistente_da_404` falla.
 
 ## Defecto 2
 
-- **Qué está mal**: Varias aserciones aceptan más de un resultado, incluido el incorrecto (`status_code in (200, 201, 422)`, `in (200, 404)`) o solo descartan que el servidor se caiga (`< 500`). Por eso no distinguen un servicio sano de uno roto: con la mutación A el 404 pasó a 200 y el test original siguió en verde.
+- **Qué está mal**: El aislamiento es falso: el test sobrescribe una función `get_db` definida en el propio archivo, no `database.get_db`, así que la app nunca la usa y los tests escriben en `app.db` (pasó de 28 a 35 pólizas). Además `test_score_de_poliza_recien_creada` solo comprueba que exista la clave `puntaje` o `error`, y con la mutación C (el score no guarda la predicción) siguió en verde.
 - **Por qué es un defecto** (módulo · sección): M10 · 6. Fixtures en pytest
 - **Cómo lo comprobamos**: Mutación C: `/score` deja de guardar la predicción (se quitan `db.add` y `db.commit`). El test original sigue en verde y el corregido falla.
 
@@ -91,11 +91,11 @@ FAILED tests/test_ia_corregido.py::test_score_registra_la_prediccion - Assert...
 1 failed, 7 passed, 1 warning in 19.25s
 ```
 
-- **Corrección**: Cada test exige un único código y comprueba el contenido: 201 al crear, 404 si no existe, 409 si está duplicado, 422 si la prima no es positiva, y valores concretos en `/resumen` y en `/predicciones`. Con la misma mutación, `test_poliza_inexistente_da_404` falla.
+- **Corrección**: El test corregido crea su propia base temporal con Alembic, sobrescribe `database.get_db` con `dependency_overrides` y comprueba que la predicción aparece en `/predicciones`. Con la mutación C, `test_score_registra_la_prediccion` falla.
 
 ## Defecto 3
 
-- **Qué está mal**: Varias aserciones aceptan más de un resultado, incluido el incorrecto (`status_code in (200, 201, 422)`, `in (200, 404)`) o solo descartan que el servidor se caiga (`< 500`). Por eso no distinguen un servicio sano de uno roto: con la mutación A el 404 pasó a 200 y el test original siguió en verde.
+- **Qué está mal**: El resultado depende de algo externo al código: el contenido de `app.db` y el uso de `random` para `tipo` y `prima`. Con un siniestro de monto -50 en la base, `GET /polizas` falló al serializar y la misma batería pasó de rojo a verde al resetear la base, sin cambiar una línea.
 - **Por qué es un defecto** (módulo · sección): M10 · 7. Reproducibilidad sin Docker
 - **Cómo lo comprobamos**: Aquí la «mutación» es un dato corrupto en la base real, no un cambio de código. El test original pasa de rojo a verde sin tocar una línea, y el corregido no cambia porque no usa esa base.
 
@@ -120,5 +120,5 @@ FAILED ia_tests_propuesta.py::test_listar_polizas_no_falla - fastapi.exceptio...
 8 passed, 1 warning in 18.42s
 ```
 
-- **Corrección**: Cada test exige un único código y comprueba el contenido: 201 al crear, 404 si no existe, 409 si está duplicado, 422 si la prima no es positiva, y valores concretos en `/resumen` y en `/predicciones`. Con la misma mutación, `test_poliza_inexistente_da_404` falla.
+- **Corrección**: El test corregido usa una base temporal nueva en cada corrida, datos fijos sin `random` y números de póliza únicos. Con la base real contaminada sigue dando `8 passed`.
 
