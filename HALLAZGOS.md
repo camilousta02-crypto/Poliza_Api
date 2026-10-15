@@ -54,8 +54,16 @@
 
 ## `/polizas`
 
+Estrategia en el código: `selectinload`. Con `lazy` (el valor por defecto) medí 11 consultas con 10 pólizas y 2001 con 2000: es un N+1, una consulta para las pólizas y una más por cada póliza al leer sus siniestros. Con `selectinload` medí 2 y 5: una consulta para las pólizas y otras para los siniestros con `WHERE poliza_id IN (...)`, en lotes de unos 500 ids. Con 10 pólizas cabe en un lote (1 + 1 = 2) y con 2000 hacen falta 4 (1 + 4 = 5). El conteo ya no crece con cada póliza, solo con el número de lotes. El tiempo pasó de 3356.8 ms a 400.8 ms con 2000.
+
 ## `/polizas/{id}`
+
+Estrategia en el código: `joinedload`. Es un solo registro, así que con `lazy` medí 2 consultas (la póliza y sus siniestros) tanto con 10 como con 2000 pólizas: el conteo no depende de n porque siempre se pide una. Con `joinedload` medí 1 consulta en los dos tamaños, porque un JOIN trae póliza y siniestros juntos. Probé también `selectinload` y medí 2 y 2, exactamente igual que `lazy`: aquí "cargar todo de una vez" con `selectinload` no mejora nada, porque con un solo registro igual hace una consulta para la póliza y otra para los hijos. Elegí `joinedload` porque es la única que baja a 1.
 
 ## `/siniestros`
 
+Estrategia en el código: `joinedload`. La relación es a uno (siniestro → póliza). Con `lazy` medí 11 y 2001 consultas. El 2001 no es 6001 porque hay 6000 siniestros pero solo 2000 pólizas distintas, y el identity map de la sesión reutiliza cada póliza ya cargada: el conteo crece con las pólizas, no con los siniestros. Con `joinedload` medí 1 consulta fija en ambos tamaños, porque un JOIN trae el siniestro con su póliza.
+
 ## `/resumen`
+
+Estrategia en el código: `agregada`. Solo hacen falta el número de siniestros y el monto total por póliza, no los siniestros en sí. Con `lazy` medí 11 y 2001 consultas. Probé `selectinload` y bajó a 2 y 5, pero trae los 6000 siniestros a memoria solo para contarlos y sumarlos, y el tiempo con 2000 fue de 343.3 ms. Con un `GROUP BY` con `COUNT` y `SUM` medí 1 consulta en ambos tamaños y 47.0 ms con 2000, sin cargar ningún siniestro. Para este endpoint el conteo de consultas de `selectinload` ya era bueno, pero hacía trabajo innecesario.
